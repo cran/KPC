@@ -1,7 +1,7 @@
 Package: KPC
 Type: Package
 Title: Kernel Partial Correlation Coefficient
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: c(person("Zhen", "Huang", email = "zh2395@columbia.edu",
     role = c("aut", "cre")),
     person("Nabarun", "Deb", email = "nd2560@columbia.edu",
@@ -31,13 +31,13 @@ Description: Implementations of two empirical versions the kernel partial correl
 License: GPL-3
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.1.1
-Depends: R (>= 3.6.0), data.table, kernlab
-Imports: RANN, proxy, parallel, gmp, emstreeR
+RoxygenNote: 7.1.2
+Depends: R (>= 4.0.0), data.table, kernlab
+Imports: RANN, proxy, parallel, mlpack
 NeedsCompilation: no
-Packaged: 2021-01-06 18:49:32 UTC; huangzhen
+Packaged: 2021-12-08 20:15:37 UTC; huangzhen
 Author: Zhen Huang [aut, cre],
   Nabarun Deb [ctb],
   Bodhisattva Sen [ctb]
 Repository: CRAN
-Date/Publication: 2021-01-08 10:50:05 UTC
+Date/Publication: 2021-12-08 20:40:02 UTC
