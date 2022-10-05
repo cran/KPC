@@ -150,12 +150,14 @@ TnMST = function(Y,X,k) {
 #' a large value indicates stronger conditional dependence.
 #' If \code{X == NULL}, it returns the \code{KMAc(Y,Z,k,Knn)}, which measures the unconditional dependence between \eqn{Y} and \eqn{Z}.
 #' Euclidean distance is used for computing the K-NN graph and the MST.
+#' MST in practice often achieves similar performance as the 2-NN graph. A small K is recommended for the K-NN graph for an accurate estimate of the population KPC,
+#' while if KPC is used as a test statistic for conditional independence, a larger K can be beneficial.
 #'
 #' @param Y a matrix (n by dy)
 #' @param X a matrix (n by dx) or \code{NULL} if \eqn{X} is empty
 #' @param Z a matrix (n by dz)
-#' @param k a function \eqn{k(y, y')} of class \code{kernel}. It can be the kernel implemented in \code{kernlab} e.g. Gaussian kernel: \code{rbfdot(sigma = 1)}, linear kernel: \code{vanilladot()}.
-#' @param Knn number of nearest neighbor to use; or "MST"
+#' @param k a function \eqn{k(y, y')} of class \code{kernel}. It can be the kernel implemented in \code{kernlab} e.g., Gaussian kernel: \code{rbfdot(sigma = 1)}, linear kernel: \code{vanilladot()}.
+#' @param Knn a positive integer indicating the number of nearest neighbor to use; or "MST". A small Knn (e.g., Knn=1) is recommended for an accurate estimate of the population KPC.
 #' @param trans_inv TRUE or FALSE. Is \eqn{k(y, y)} free of \eqn{y}?
 #'
 #' @import data.table
@@ -242,7 +244,7 @@ double_center = function(M){
 #' @param Y a matrix (n by dy)
 #' @param X a matrix (n by dx) or \code{NULL} if \eqn{X} is empty
 #' @param Z a matrix (n by dz)
-#' @param ky a function \eqn{k(y, y')} of class \code{kernel}. It can be the kernel implemented in \code{kernlab} e.g. Gaussian kernel: \code{rbfdot(sigma = 1)}, linear kernel: \code{vanilladot()}.
+#' @param ky a function \eqn{k(y, y')} of class \code{kernel}. It can be the kernel implemented in \code{kernlab} e.g., Gaussian kernel: \code{rbfdot(sigma = 1)}, linear kernel: \code{vanilladot()}.
 #' @param kx the kernel function for \eqn{X}
 #' @param kxz the kernel function for \eqn{(X, Z)} or for \eqn{Z} if \eqn{X} is empty
 #' @param eps a small positive regularization parameter for inverting the empirical cross-covariance operator
@@ -317,46 +319,32 @@ KPCRKHS = function(Y, X = NULL, Z, ky = kernlab::rbfdot(1/(2*stats::median(stats
 #'
 #' Variable selection with KPC using directed K-NN graph or minimum spanning tree (MST)
 #'
-#' A stepwise forward selection of variables using KPC. At each step the \eqn{X_j} maximizing \eqn{\hat{\rho^2}(Y,X_j | selected X_i)} is selected.
+#' A stepwise forward selection of variables using KPC. At each step it selects the \eqn{X_j} that maximizes
+#' \eqn{\hat{\rho^2}(Y,X_j |}selected \eqn{X_i)}.
 #' It is suggested to normalize the predictors before applying KFOCI.
 #' Euclidean distance is used for computing the K-NN graph and the MST.
 #'
 #' @param Y a matrix of responses (n by dy)
 #' @param X a matrix of predictors (n by dx)
-#' @param k a function \eqn{k(y, y')} of class \code{kernel}. It can be the kernel implemented in \code{kernlab} e.g. Gaussian kernel: \code{rbfdot(sigma = 1)}, linear kernel: \code{vanilladot()}.
-#' @param Knn the number of nearest neighbor; or "MST"
+#' @param k a function \eqn{k(y, y')} of class \code{kernel}. It can be the kernel implemented in \code{kernlab} e.g., Gaussian kernel: \code{rbfdot(sigma = 1)}, linear kernel: \code{vanilladot()}.
+#' @param Knn a positive integer indicating the number of nearest neighbor; or "MST". The suggested choice of Knn is 0.05n for samples up to a few hundred observations. For large n, the suggested Knn is sublinear in n. That is, it may grow slower than any linear function of n. The computing time is approximately linear in Knn. A smaller Knn takes less time.
 #' @param num_features the number of variables to be selected, cannot be larger than dx. The default value is NULL and in that
 #'   case it will be set equal to dx. If \code{stop == TRUE} (see below), then num_features is the maximal number of variables to be selected.
 #' @param stop If \code{stop == TRUE}, then the automatic stopping criterion (stops at the first instance of negative Tn, as mentioned in the paper) will be implemented and continued till \code{num_features} many variables are selected. If \code{stop == FALSE} then exactly \code{num_features} many variables are selected.
 #' @param numCores number of cores that are going to be used for parallelizing the process.
 #' @param verbose whether to print each selected variables during the forward stepwise algorithm
 #' @export
-#' @return The algorithm returns a vector of the indices from 1,...,dx of the selected variables
-#' @seealso \code{\link{KPCgraph}}, \code{\link{KPCRKHS}}
+#' @return The algorithm returns a vector of the indices from 1,...,dx of the selected variables in the same order that they were selected. The variables at the front are expected to be more informative in predicting Y.
+#' @seealso \code{\link{KPCgraph}}, \code{\link{KPCRKHS}}, \code{\link{KPCRKHS_VS}}
 #' @examples
 #' n = 200
 #' p = 10
 #' X = matrix(rnorm(n * p), ncol = p)
 #' Y = X[, 1] * X[, 2] + sin(X[, 1] * X[, 3])
 #' KFOCI(Y, X, kernlab::rbfdot(1), Knn=1, numCores=1)
-#' \dontrun{
-#' ### install the package olsrr first
-#' surgical = olsrr::surgical
-#' for (i in 1:9) surgical[,i] = (surgical[,i] - mean(surgical[,i]))/sd(surgical[,i])
-#' ky = kernlab::rbfdot(1/(2*stats::median(stats::dist(surgical$y))^2))
-#' colnames(surgical)[KFOCI(surgical[,9],surgical[,1:8],ky,Knn=1)]
-#' #### "enzyme_test" "pindex" "liver_test"  "alc_heavy"
-#'
-#' n = 200
-#' p = 1000
-#' set.seed(1)
-#' X = matrix(rnorm(n * p), ncol = p)
-#' Y = X[, 1] * X[, 2] + sin(X[, 1] * X[, 3])
-#' KFOCI(Y, X, kernlab::rbfdot(1), Knn=1, numCores = 7, verbose=TRUE)
 #' # 1 2 3
-#' }
 # code modified from Azadkia, M. and Chatterjee, S. (2019). A simple measure of conditional dependence.
-KFOCI <- function(Y, X, k = kernlab::rbfdot(1/(2*stats::median(stats::dist(Y))^2)), Knn = 1, num_features = NULL, stop = TRUE, numCores = 1, verbose = FALSE){
+KFOCI <- function(Y, X, k = kernlab::rbfdot(1/(2*stats::median(stats::dist(Y))^2)), Knn = min(ceiling(NROW(Y)/20),20), num_features = NULL, stop = TRUE, numCores = parallel::detectCores(), verbose = FALSE){
   if (!is.matrix(X)) X = as.matrix(X)
   if (!is.matrix(Y)) Y = as.matrix(Y)
   if ((nrow(Y) != nrow(X))) stop("Number of rows of Y and X should be equal.")
@@ -418,21 +406,21 @@ KFOCI <- function(Y, X, k = kernlab::rbfdot(1/(2*stats::median(stats::dist(Y))^2
 #'
 #' The algorithm performs a forward stepwise variable selection using RKHS estimators.
 #'
-#' A stepwise forward selection of variables using KPC. At each step the \eqn{Xj} maximizing \eqn{\tilde{\rho^2}(Y,X_j | selected X_i)} is selected.
+#' A stepwise forward selection of variables using KPC. At each step it selects the \eqn{X_j} that maximizes \eqn{\tilde{\rho^2}(Y,X_j |}selected \eqn{X_i)}.
 #' It is suggested to normalize the features before applying the algorithm.
 #'
 #' @param Y a matrix of responses (n by dy)
 #' @param X a matrix of predictors (n by dx)
-#' @param ky a function \eqn{k(y, y')} of class \code{kernel}. It can be the kernel implemented in \code{kernlab} e.g. Gaussian kernel: \code{rbfdot(sigma = 1)}, linear kernel: \code{vanilladot()}
-#' @param kS a function that takes X and a subset of indices S as inputs, and then outputs the kernel for X_S. The first argument of kS is X, and the second argument is a vector of positive integer. If \code{kS == NULL}, Gaussian kernel with empitical bandwidth will be used, i.e., \code{kernlab::rbfdot(1/(2*stats::median(stats::dist(X[,S]))^2))}
+#' @param ky a function \eqn{k(y, y')} of class \code{kernel}. It can be the kernel implemented in \code{kernlab} e.g., Gaussian kernel: \code{rbfdot(sigma = 1)}, linear kernel: \code{vanilladot()}
+#' @param kS a function that takes X and a subset of indices S as inputs, and then outputs the kernel for X_S. The first argument of kS is X, and the second argument is a vector of positive integer. If \code{kS == NULL}, Gaussian kernel with empitical bandwidth \code{kernlab::rbfdot(1/(2*stats::median(stats::dist(X[,S]))^2))} will be used.
 #' @param num_features the number of variables to be selected, cannot be larger than dx.
 #' @param eps a positive number; the regularization parameter for the RKHS estimator
 #' @param appro whether to use incomplete Cholesky decomposition for approximation
 #' @param tol tolerance used for incomplete Cholesky decomposition (\code{inchol} in package \code{kernlab})
 #' @param numCores number of cores that are going to be used for parallelizing the process.
 #' @param verbose whether to print each selected variables during the forward stepwise algorithm
-#' @seealso \code{\link{KPCgraph}}, \code{\link{KPCRKHS}}
-#' @return The algorithm returns a vector of the indices from \code{1,...,dx} of the selected variables
+#' @seealso \code{\link{KPCgraph}}, \code{\link{KPCRKHS}}, \code{\link{KFOCI}}
+#' @return The algorithm returns a vector of the indices from \code{1,...,dx} of the selected variables in the same order that they were selected. The variables at the front are expected to be more informative in predicting Y.
 #' @export
 #' @examples
 #' n = 200
@@ -445,7 +433,7 @@ KFOCI <- function(Y, X, k = kernlab::rbfdot(1/(2*stats::median(stats::dist(Y))^2
 #' kS = function(X,S) return(rbfdot(1/(2*stats::median(stats::dist(X[,S]))^2)))
 #' KPCRKHS_VS(Y, X, num_features = 3, rbfdot(1), kS, eps = 1e-3, appro = FALSE, numCores = 1)
 # code modified from Azadkia, M. and Chatterjee, S. (2019). A simple measure of conditional dependence.
-KPCRKHS_VS <- function(Y, X, num_features, ky = kernlab::rbfdot(1/(2*stats::median(stats::dist(Y))^2)), kS = NULL, eps = 1e-3, appro = FALSE, tol = 1e-5, numCores = 1, verbose = FALSE){
+KPCRKHS_VS <- function(Y, X, num_features, ky = kernlab::rbfdot(1/(2*stats::median(stats::dist(Y))^2)), kS = NULL, eps = 1e-3, appro = FALSE, tol = 1e-5, numCores = parallel::detectCores(), verbose = FALSE){
   if (!is.matrix(X)) X = as.matrix(X)
   if (!is.matrix(Y)) Y = as.matrix(Y)
   if ((nrow(Y) != nrow(X))) stop("Number of rows of Y and X should be equal.")
@@ -562,7 +550,7 @@ KPCRKHS_numerator = function(Y, X = NULL, Z, ky, kx, kxz, eps, appro = FALSE, to
 #'
 #' Calculate \eqn{\hat{\eta}_n} (the unconditional version of graph-based KPC) using directed K-NN graph or minimum spanning tree (MST).
 #'
-#' \eqn{\hat{\eta}_n} is an estimate of the population kernel measure of association, based on data \eqn{(X_1,Y_1),\ldots ,(X_n,Y_n)\sim \mu}.
+#' \eqn{\hat{\eta}_n} is an estimate of the population kernel measure of association, based on data \eqn{\{(X_i,Y_i)\}_{i=1}^n} from \eqn{\mu}.
 #' For K-NN graph, ties will be broken at random. MST is found using package \code{emstreeR}.
 #' In particular,
 #' \deqn{\hat{\eta}_n:=\frac{n^{-1}\sum_{i=1}^n d_i^{-1}\sum_{j:(i,j)\in\mathcal{E}(G_n)} k(Y_i,Y_j)-(n(n-1))^{-1}\sum_{i\neq j}k(Y_i,Y_j)}{n^{-1}\sum_{i=1}^n k(Y_i,Y_i)-(n(n-1))^{-1}\sum_{i\neq j}k(Y_i,Y_j)},}
@@ -572,8 +560,8 @@ KPCRKHS_numerator = function(Y, X = NULL, Z, ky, kx, kxz, eps, appro = FALSE, to
 #'
 #' @param Y a matrix of response (n by dy)
 #' @param X a matrix of predictors (n by dx)
-#' @param k a function \eqn{k(y, y')} of class \code{kernel}. It can be the kernel implemented in \code{kernlab} e.g. Gaussian kernel: \code{rbfdot(sigma = 1)}, linear kernel: \code{vanilladot()}
-#' @param Knn the number of K-nearest neighbor to use; or "MST".
+#' @param k a function \eqn{k(y, y')} of class \code{kernel}. It can be the kernel implemented in \code{kernlab} e.g., Gaussian kernel: \code{rbfdot(sigma = 1)}, linear kernel: \code{vanilladot()}
+#' @param Knn the number of K-nearest neighbor to use; or "MST". A small Knn (e.g., Knn=1) is recommended for an accurate estimate of the population KMAc.
 #' @return The algorithm returns a real number `KMAc', the empirical kernel measure of association
 #' @seealso \code{\link{KPCgraph}}, \code{\link{Klin}}
 #' @export
@@ -601,7 +589,7 @@ KMAc = function(Y, X, k = kernlab::rbfdot(1/(2*stats::median(stats::dist(Y))^2))
 #' Calculate \eqn{\hat{\eta}_n^{\mbox{lin}}} (the unconditional version of graph-based KPC) using directed K-NN graph or minimum spanning tree (MST).
 #' The computational complexity is O(nlog(n))
 #'
-#' \eqn{\hat{\eta}_n} is an estimate of the population kernel measure of association, based on data \eqn{(X_1,Y_1),\ldots ,(X_n,Y_n)\sim \mu}.
+#' \eqn{\hat{\eta}_n} is an estimate of the population kernel measure of association, based on data \eqn{\{(X_i,Y_i)\}_{i=1}^n} from \eqn{\mu}.
 #' For K-NN graph, \eqn{\hat{\eta}_n} can be computed in near linear time (in \eqn{n}).
 #' In particular,
 #' \deqn{\hat{\eta}_n^{\mbox{lin}}:=\frac{n^{-1}\sum_{i=1}^n d_i^{-1}\sum_{j:(i,j)\in\mathcal{E}(G_n)} k(Y_i,Y_j)-(n-1)^{-1}\sum_{i=1}^{n-1} k(Y_i,Y_{i+1})}{n^{-1}\sum_{i=1}^n k(Y_i,Y_i)-(n-1)^{-1}\sum_{i=1}^{n-1} k(Y_i,Y_{i+1})}},
@@ -611,7 +599,7 @@ KMAc = function(Y, X, k = kernlab::rbfdot(1/(2*stats::median(stats::dist(Y))^2))
 #' @param Y a matrix of response (n by dy)
 #' @param X a matrix of predictors (n by dx)
 #' @param k a function \eqn{k(y, y')} of class \code{kernel}. It can be the kernel implemented in \code{kernlab} e.g. \code{rbfdot(sigma = 1)}, \code{vanilladot()}
-#' @param Knn the number of K-nearest neighbor to use; or "MST".
+#' @param Knn the number of K-nearest neighbor to use; or "MST". A small Knn (e.g., Knn=1) is recommended.
 #' @return The algorithm returns a real number `Klin': an empirical kernel measure of association which can be computed in near linear time when K-NN graphs are used.
 #' @export
 #' @seealso \code{\link{KPCgraph}}, \code{\link{KMAc}}
